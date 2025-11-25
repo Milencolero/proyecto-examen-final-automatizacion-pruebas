@@ -1,0 +1,78 @@
+pipeline {
+    agent any
+
+    tools {
+        // Nombres configurados en Jenkins (pueden ser genéricos)
+        maven 'Maven-3'
+        jdk   'JDK-17'
+    }
+
+    environment {
+        // Variables simuladas para entorno de pruebas
+        TEST_SERVER  = 'qa-servidor.ejemplo.local'
+        BLUE_PATH    = '/opt/apps/proyecto-ev2-java-mvn-blue'
+        GREEN_PATH   = '/opt/apps/proyecto-ev2-java-mvn-green'
+        CURRENT_LINK = '/opt/apps/proyecto-ev2-java-mvn-current'
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                echo 'Obteniendo código fuente desde Git...'
+                checkout scm
+            }
+        }
+
+        stage('Build Artifact') {
+            steps {
+                echo 'Compilando proyecto y generando artefacto...'
+                // Construye el .jar sin volver a ejecutar tests unitarios
+                sh 'mvn -B clean package -DskipTests'
+            }
+        }
+
+        stage('Acceptance Tests') {
+            steps {
+                echo 'Ejecutando pruebas de aceptación (simuladas)...'
+                sh '''
+                    echo "Iniciando pruebas de aceptación..."
+                    mvn -B test
+                    echo "Pruebas de aceptación finalizadas correctamente."
+                '''
+            }
+        }
+
+        stage('Blue-Green Deploy (GREEN)') {
+            steps {
+                echo "Desplegando nueva versión en entorno GREEN (sin tocar BLUE)..."
+                sh """
+                    echo "Copiando .jar a ${GREEN_PATH} en ${TEST_SERVER} (SIMULADO)..."
+                    echo "scp target/proyecto-ev2-java-mvn-1.0-SNAPSHOT.jar deploy@${TEST_SERVER}:${GREEN_PATH}/app.jar"
+
+                    echo "Verificando salud de GREEN (SIMULADO)..."
+                    echo "curl -f http://${TEST_SERVER}:8081/actuator/health || echo 'Healthcheck FALLÓ (simulado)'"
+
+                    echo "Apuntando el tráfico a GREEN (SIMULADO)..."
+                    echo "ssh deploy@${TEST_SERVER} 'ln -sfn ${GREEN_PATH} ${CURRENT_LINK} && systemctl restart proyecto-ev2-java-mvn.service'"
+
+                    echo "Deploy Blue-Green completado (simulado)."
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Deployment pipeline ejecutado correctamente (build + acceptance tests + Blue-Green deploy).'
+        }
+        failure {
+            echo '❌ Falló el deployment. Iniciando ROLLBACK a entorno BLUE (simulado)...'
+            sh """
+                echo "Reapuntando enlace CURRENT a BLUE en ${TEST_SERVER} (SIMULADO)..."
+                echo "ssh deploy@${TEST_SERVER} 'ln -sfn ${BLUE_PATH} ${CURRENT_LINK} && systemctl restart proyecto-ev2-java-mvn.service'"
+                echo "Rollback completado (simulado)."
+            """
+        }
+    }
+}
